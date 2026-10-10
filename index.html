@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Bloom Grid – Logic Puzzle</title>
+<meta name="description" content="Place one flower in every garden. No two flowers in the same row or column, and they can't touch. A free brain puzzle that gets harder every level.">
+<meta name="theme-color" content="#1f7a5a">
+<meta property="og:title" content="Bloom Grid – can you solve this level?">
+<meta property="og:description" content="One flower per row, column and garden. Flowers can't touch. 99% get stuck by level 20.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%B8%3C/text%3E%3C/svg%3E">
+
+<!--
+  ================= ADS SETUP (read me) =================
+  1) Testing locally / on your own site before approval:
+       keep CONFIG.AD_PROVIDER = 'simulate' (shows a fake ad screen)
+
+  2) Google H5 Games Ads (after AdSense approval + H5 games access):
+       - uncomment the script below, put your ca-pub id
+       - remove data-adbreak-test="on" when going live
+       - set CONFIG.AD_PROVIDER = 'h5'
+  <script async data-adbreak-test="on"
+    src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX"
+    crossorigin="anonymous"></script>
+
+  3) CrazyGames portal:
+       - uncomment the SDK script below
+       - set CONFIG.AD_PROVIDER = 'crazygames'
+  <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+
+  (Always double-check the latest docs of each provider – APIs change.)
+  =======================================================
+-->
+
+<style>
+:root{
+  --bg:#f5efe4; --bg2:#ebe3d3; --ink:#24312c; --muted:#6c7a73;
+  --accent:#1f7a5a; --accent2:#2a9d74; --heart:#e2475b; --gold:#f2b632;
+  --card:#fffaf2; --shadow:0 10px 30px rgba(36,49,44,.18);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+  font-family:ui-rounded,"SF Pro Rounded","Nunito","Segoe UI",system-ui,sans-serif;overscroll-behavior:none}
+body{display:flex;justify-content:center}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+.hidden{display:none!important}
+
+#app{width:100%;max-width:620px;min-height:100dvh;display:flex;flex-direction:column;align-items:center;
+  padding:max(10px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom))}
+.top{width:100%;display:flex;align-items:center;gap:10px;padding:4px 2px 10px}
+.icon{width:40px;height:40px;border-radius:12px;background:var(--card);box-shadow:0 2px 0 var(--bg2);font-size:20px;display:grid;place-items:center}
+.lvl{font-weight:800;font-size:20px;flex:1}
+.lvl small{display:block;font-size:12px;font-weight:600;color:var(--muted)}
+.hearts{display:flex;gap:3px;font-size:20px}
+.hearts span{transition:transform .2s,opacity .2s}
+.hearts .empty{opacity:.22;filter:grayscale(1)}
+.timer{min-width:52px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:var(--muted)}
+
+main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%}
+.board{display:grid;border-radius:14px;overflow:hidden;box-shadow:0 0 0 3px var(--ink),var(--shadow);
+  touch-action:none;user-select:none;-webkit-user-select:none;background:var(--ink)}
+.board.shake{animation:shake .35s}
+@keyframes shake{20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+.cell{position:relative;display:grid;place-items:center;font-size:calc(var(--cell)*.5)}
+.cell .x{color:rgba(36,49,44,.55);font-weight:700;line-height:1;font-size:calc(var(--cell)*.42)}
+.cell{min-width:0;min-height:0;overflow:hidden}
+.cell svg{width:calc(var(--cell)*.74);height:calc(var(--cell)*.74);display:block}
+.cell.pop svg{animation:pop .32s cubic-bezier(.3,1.6,.5,1)}
+@keyframes pop{0%{transform:scale(.2) rotate(-40deg)}100%{transform:scale(1) rotate(0)}}
+.cell.bad::after{content:"";position:absolute;inset:0;background:rgba(226,71,91,.55);animation:fade .7s forwards}
+@keyframes fade{to{opacity:0}}
+.cell.hinted svg{filter:drop-shadow(0 0 4px #fff) drop-shadow(0 0 6px var(--gold))}
+.board.won .cell svg{animation:bloom 1s ease-in-out infinite alternate}
+@keyframes bloom{to{transform:scale(1.12) rotate(12deg)}}
+
+.rule{margin:14px 6px 0;text-align:center;color:var(--muted);font-size:14px;line-height:1.4;max-width:420px}
+.tools{display:flex;gap:10px;width:100%;max-width:560px;padding-top:14px}
+.tools button{flex:1;background:var(--card);border-radius:14px;padding:12px 6px;font-weight:700;box-shadow:0 3px 0 var(--bg2);font-size:15px}
+.tools button:active,.btn:active,.icon:active{transform:translateY(2px);box-shadow:none}
+.tools small{display:block;font-size:11px;color:var(--muted);font-weight:600}
+
+/* overlays */
+.screen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;z-index:20;text-align:center}
+.screen h1{font-size:44px;margin:10px 0 4px;letter-spacing:-1px}
+.screen p.sub{margin:0 0 26px;color:var(--muted);font-size:16px}
+.logo{width:120px;height:120px;animation:bloom 2.2s ease-in-out infinite alternate}
+.btn{display:block;width:100%;max-width:300px;margin:8px auto;padding:15px;border-radius:16px;font-weight:800;font-size:18px;
+  background:var(--accent);color:#fff;box-shadow:0 4px 0 #145640}
+.btn.alt{background:var(--card);color:var(--ink);box-shadow:0 4px 0 var(--bg2)}
+.btn.gold{background:var(--gold);color:#3a2a00;box-shadow:0 4px 0 #b9851b}
+.row{display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap}
+.chip{background:var(--card);border-radius:999px;padding:8px 14px;font-weight:700;font-size:14px;box-shadow:0 2px 0 var(--bg2)}
+.how{max-width:330px;margin:22px auto 0;text-align:left;color:var(--muted);font-size:14px;line-height:1.55}
+.how b{color:var(--ink)}
+.foot{position:absolute;bottom:max(14px,env(safe-area-inset-bottom));font-size:12px;color:var(--muted)}
+.foot a{color:var(--muted)}
+
+.modal{position:fixed;inset:0;background:rgba(36,49,44,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:30;backdrop-filter:blur(3px)}
+.card{background:var(--card);border-radius:24px;padding:26px 22px;width:100%;max-width:360px;text-align:center;box-shadow:var(--shadow);animation:rise .3s cubic-bezier(.3,1.4,.5,1)}
+@keyframes rise{from{transform:translateY(30px) scale(.95);opacity:0}}
+.card h2{margin:6px 0 6px;font-size:28px}
+.card p{margin:0 0 18px;color:var(--muted)}
+.big{font-size:54px;line-height:1}
+.levels{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;max-height:52vh;overflow:auto;padding:4px;margin-bottom:12px}
+.levels button{aspect-ratio:1;border-radius:12px;background:var(--bg);font-weight:800}
+.levels button.done{background:#cfe9dc;color:var(--accent)}
+.levels button.cur{background:var(--accent);color:#fff}
+.levels button:disabled{opacity:.35;cursor:default}
+
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:12px;font-weight:700;z-index:50;font-size:14px;animation:rise .25s}
+
+.adsim{position:fixed;inset:0;background:#111;color:#fff;z-index:60;display:flex;align-items:center;justify-content:center}
+.adsim .adbox{text-align:center}
+.adsim small{opacity:.6;letter-spacing:2px}
+.adsim .adbig{font-size:30px;font-weight:800;margin:18px 0}
+.adsim #adCount{font-size:48px;font-weight:800;margin-bottom:16px}
+.adsim button{background:#fff;color:#111;padding:10px 20px;border-radius:12px;font-weight:800}
+
+.petal{position:fixed;top:-30px;z-index:40;pointer-events:none;font-size:24px;animation:fall linear forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(540deg)}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="flower" viewBox="0 0 100 100">
+    <g stroke="#a3344c" stroke-width="3">
+      <ellipse cx="50" cy="24" rx="17" ry="22" fill="#ff8fab"/>
+      <ellipse cx="50" cy="24" rx="17" ry="22" fill="#ff8fab" transform="rotate(72 50 50)"/>
+      <ellipse cx="50" cy="24" rx="17" ry="22" fill="#ff8fab" transform="rotate(144 50 50)"/>
+      <ellipse cx="50" cy="24" rx="17" ry="22" fill="#ff8fab" transform="rotate(216 50 50)"/>
+      <ellipse cx="50" cy="24" rx="17" ry="22" fill="#ff8fab" transform="rotate(288 50 50)"/>
+    </g>
+    <circle cx="50" cy="50" r="14" fill="#ffd166" stroke="#c98a00" stroke-width="3"/>
+    <circle cx="45" cy="45" r="4" fill="#fff3c4"/>
+  </symbol>
+</svg>
+
+<div id="app">
+  <header class="top">
+    <button class="icon" id="homeBtn" aria-label="Home">⌂</button>
+    <div class="lvl">Level <span id="lvlNum">1</span><small id="lvlSize">5×5</small></div>
+    <div class="hearts" id="hearts"></div>
+    <div class="timer" id="timer">0:00</div>
+  </header>
+  <main>
+    <div class="board" id="board"></div>
+    <p class="rule">Tap once for <b>✕</b>, tap again for a <b>flower</b>. One flower per row, column &amp; colour. Flowers can't touch – not even diagonally. Drag to mark many ✕.</p>
+  </main>
+  <footer class="tools">
+    <button id="undoBtn">↶ Undo</button>
+    <button id="hintBtn">💡 Hint<small>watch ad</small></button>
+    <button id="shareBtn">↗ Challenge<small>a friend</small></button>
+  </footer>
+</div>
+
+<!-- Home -->
+<section class="screen" id="home">
+  <svg class="logo"><use href="#flower"/></svg>
+  <h1>Bloom Grid</h1>
+  <p class="sub">One flower per garden. Easy to learn, hard to master.</p>
+  <button class="btn" id="playBtn">Play · Level 1</button>
+  <button class="btn alt" id="levelsBtn">Levels</button>
+  <div class="row">
+    <button class="chip" id="soundBtn">🔊 Sound on</button>
+    <button class="chip" id="autoBtn">✕ Auto-mark on</button>
+  </div>
+  <div class="how">
+    <b>How to play</b><br>
+    • Put exactly <b>one flower</b> in every row, every column and every coloured garden.<br>
+    • Two flowers can <b>never touch</b>, not even corner to corner.<br>
+    • Wrong flower = you lose a ❤. Lose all 3 and the garden wilts!
+  </div>
+  <div class="foot"><a href="privacy.html">Privacy</a></div>
+</section>
+
+<!-- Win -->
+<div class="modal hidden" id="winModal"><div class="card">
+  <div class="big">🌸</div>
+  <h2>Garden bloomed!</h2>
+  <p id="winText">Level 1 solved in 0:12</p>
+  <button class="btn" id="nextBtn">Next level →</button>
+  <button class="btn alt" id="winShareBtn">↗ Challenge a friend</button>
+</div></div>
+
+<!-- Fail -->
+<div class="modal hidden" id="failModal"><div class="card">
+  <div class="big">🥀</div>
+  <h2>Out of hearts</h2>
+  <p>So close! Keep your progress and continue.</p>
+  <button class="btn gold" id="reviveBtn">▶ Watch ad · +1 ❤</button>
+  <button class="btn alt" id="retryBtn">Restart level</button>
+</div></div>
+
+<!-- Levels -->
+<div class="modal hidden" id="levelsModal"><div class="card">
+  <h2>Levels</h2>
+  <div class="levels" id="levelGrid"></div>
+  <button class="btn alt" id="closeLevels">Close</button>
+</div></div>
+
+<!-- Simulated ad (test mode) -->
+<div class="adsim hidden" id="adSim"><div class="adbox">
+  <small>ADVERTISEMENT · TEST MODE</small>
+  <div class="adbig">Your ad shows here</div>
+  <div id="adCount">3</div>
+  <button id="adClose" class="hidden">Close ✕</button>
+</div></div>
+
+<script>
+/* ================== CONFIG ================== */
+const CONFIG = {
+  AD_PROVIDER: 'simulate',      // 'simulate' | 'h5' | 'crazygames' | 'none'
+  INTERSTITIAL_EVERY: 3,        // show an interstitial every N solved levels...
+  INTERSTITIAL_FROM_LEVEL: 4,   // ...but never before this level
+  HEARTS: 3,
+  REGION_COLORS: ['#f7c6c7','#fbe3a6','#bfe3c0','#b9d7f2','#d9c8f0','#ffd2a8','#c8ece6','#e3e7a4','#f0c8e4'],
+};
+
+/* ================== LEVEL GENERATOR ================== */
+// @@GEN_START
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+function shuffle(a,rnd){for(let i=a.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function sizeForLevel(l){ if(l<=3) return 5; if(l<=12) return 6; if(l<=30) return 7; if(l<=60) return 8; return 9; }
+
+// random valid flower placement: one per row/col, no touching between consecutive rows
+function randomPlacement(n,rnd){
+  const cols=[],used=new Array(n).fill(false);
+  (function bt(r){
+    if(r===n) return true;
+    for(const c of shuffle([...Array(n).keys()],rnd)){
+      if(used[c]||(r>0&&Math.abs(cols[r-1]-c)<=1)) continue;
+      used[c]=true;cols[r]=c;
+      if(bt(r+1)) return true;
+      used[c]=false;
+    }
+    return false;
+  })(0);
+  return cols;
+}
+
+// grow one coloured region from each flower until the grid is full
+function growRegions(n,sol,rnd){
+  const reg=Array.from({length:n},()=>new Array(n).fill(-1));
+  const w=[];
+  for(let r=0;r<n;r++){reg[r][sol[r]]=r;w[r]=0.2+rnd()*rnd()*2.5;}
+  let left=n*n-n;
+  const D=[[1,0],[-1,0],[0,1],[0,-1]];
+  while(left>0){
+    const cand=[];let tot=0;
+    for(let r=0;r<n;r++)for(let c=0;c<n;c++){
+      if(reg[r][c]!==-1) continue;
+      for(const[dr,dc]of D){
+        const rr=r+dr,cc=c+dc;
+        if(rr<0||cc<0||rr>=n||cc>=n) continue;
+        const g=reg[rr][cc]; if(g<0) continue;
+        cand.push([r,c,g]);tot+=w[g];
+      }
+    }
+    let x=rnd()*tot,pick=cand[cand.length-1];
+    for(const k of cand){x-=w[k[2]];if(x<=0){pick=k;break;}}
+    reg[pick[0]][pick[1]]=pick[2];left--;
+  }
+  return reg;
+}
+
+// count solutions (stops at `limit`)
+function countSolutions(n,reg,limit=2){
+  let count=0;const uc=new Array(n).fill(false),ug=new Array(n).fill(false);
+  (function bt(r,prev){
+    if(r===n){count++;return;}
+    for(let c=0;c<n&&count<limit;c++){
+      if(uc[c]||(r>0&&Math.abs(prev-c)<=1)) continue;
+      const g=reg[r][c]; if(ug[g]) continue;
+      uc[c]=ug[g]=true; bt(r+1,c); uc[c]=ug[g]=false;
+    }
+  })(0,-9);
+  return count;
+}
+
+// same level number => same puzzle for everyone (great for "Level 23 is impossible" videos)
+function generateLevel(level){
+  const n=sizeForLevel(level);
+  const rnd=mulberry32(level*7919+1337);
+  let fallback=null;
+  for(let t=0;t<6000;t++){
+    const sol=randomPlacement(n,rnd);
+    const reg=growRegions(n,sol,rnd);
+    if(countSolutions(n,reg,2)===1) return {n,reg,sol,unique:true};
+    if(!fallback) fallback={n,reg,sol,unique:false};
+  }
+  return fallback;
+}
+// @@GEN_END
+
+/* ================== HELPERS ================== */
+const $=s=>document.querySelector(s);
+const Store={
+  get(k,d){try{const v=localStorage.getItem('bloomgrid:'+k);return v==null?d:JSON.parse(v);}catch(e){return d;}},
+  set(k,v){try{localStorage.setItem('bloomgrid:'+k,JSON.stringify(v));}catch(e){}}
+};
+const fmt=s=>Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),1800);}
+function vibrate(ms){try{navigator.vibrate&&navigator.vibrate(ms);}catch(e){}}
+const FLOWER='<svg><use href="#flower"/></svg>';
+
+let settings=Store.get('settings',{sound:true,autoX:true});
+
+const Sound=(()=>{
+  let ctx=null,muted=false;
+  function tone(f,d=.08,type='sine',vol=.06){
+    if(muted||!settings.sound) return;
+    try{
+      ctx=ctx||new(window.AudioContext||window.webkitAudioContext)();
+      const o=ctx.createOscillator(),g=ctx.createGain(),t=ctx.currentTime;
+      o.type=type;o.frequency.value=f;g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.0001,t+d);
+      o.connect(g).connect(ctx.destination);o.start(t);o.stop(t+d);
+    }catch(e){}
+  }
+  return{mute(m){muted=m},tap(){tone(520,.05)},place(){tone(660,.12,'triangle',.08)},
+    wrong(){tone(140,.28,'sawtooth',.05)},win(){[523,659,784,1046].forEach((f,i)=>setTimeout(()=>tone(f,.18,'triangle',.08),i*110))}};
+})();
+
+/* ================== ADS ================== */
+const Ads={
+  async init(){
+    try{
+      if(CONFIG.AD_PROVIDER==='h5'){
+        window.adsbygoogle=window.adsbygoogle||[];
+        window.adBreak=window.adConfig=function(o){window.adsbygoogle.push(o);};
+        adConfig({preloadAdBreaks:'on',sound:'on'});
+      }
+      if(CONFIG.AD_PROVIDER==='crazygames'&&window.CrazyGames) await window.CrazyGames.SDK.init();
+    }catch(e){console.warn('ads init',e);}
+  },
+  gameplayStart(){try{if(CONFIG.AD_PROVIDER==='crazygames')window.CrazyGames.SDK.game.gameplayStart();}catch(e){}},
+  gameplayStop(){try{if(CONFIG.AD_PROVIDER==='crazygames')window.CrazyGames.SDK.game.gameplayStop();}catch(e){}},
+
+  // onReward runs only if the player earned it
+  rewarded(name,onReward){
+    const p=CONFIG.AD_PROVIDER;
+    if(p==='h5'&&window.adBreak){
+      let viewed=false;
+      adBreak({type:'reward',name,
+        beforeAd:()=>Sound.mute(true),afterAd:()=>Sound.mute(false),
+        beforeReward:show=>show(),adViewed:()=>{viewed=true;},adDismissed:()=>{},
+        adBreakDone:info=>{
+          if(viewed) onReward();
+          else if(info&&info.breakStatus!=='dismissed') onReward(); // no ad available -> be generous
+          else toast('Watch the full ad to get the reward');
+        }});
+      return;
+    }
+    if(p==='crazygames'&&window.CrazyGames){
+      window.CrazyGames.SDK.ad.requestAd('rewarded',{
+        adStarted:()=>Sound.mute(true),
+        adFinished:()=>{Sound.mute(false);onReward();},
+        adError:()=>{Sound.mute(false);onReward();} // no fill -> be generous
+      });
+      return;
+    }
+    if(p==='simulate') return simulateAd(3,onReward);
+    onReward();
+  },
+  interstitial(name,done){
+    const p=CONFIG.AD_PROVIDER;
+    if(p==='h5'&&window.adBreak){
+      adBreak({type:'next',name,beforeAd:()=>Sound.mute(true),afterAd:()=>Sound.mute(false),adBreakDone:()=>done()});
+      return;
+    }
+    if(p==='crazygames'&&window.CrazyGames){
+      window.CrazyGames.SDK.ad.requestAd('midgame',{
+        adStarted:()=>Sound.mute(true),
+        adFinished:()=>{Sound.mute(false);done();},
+        adError:()=>{Sound.mute(false);done();}
+      });
+      return;
+    }
+    if(p==='simulate') return simulateAd(2,done);
+    done();
+  }
+};
+function simulateAd(sec,done){
+  const box=$('#adSim'),cnt=$('#adCount'),close=$('#adClose');
+  box.classList.remove('hidden');close.classList.add('hidden');cnt.textContent=sec;
+  let s=sec;const id=setInterval(()=>{s--;cnt.textContent=s>0?s:'';if(s<=0){clearInterval(id);close.classList.remove('hidden');}},1000);
+  close.onclick=()=>{box.classList.add('hidden');done();};
+}
+
+/* ================== GAME ================== */
+const board=$('#board');
+const cache=new Map();
+const getLevel=l=>{if(!cache.has(l))cache.set(l,generateLevel(l));return cache.get(l);};
+let S=null,timerId=null;
+
+function startLevel(level){
+  level=Math.max(1,Math.floor(level)||1);
+  closeModals();$('#home').classList.add('hidden');
+  const L=getLevel(level);
+  S={level,n:L.n,reg:L.reg,sol:L.sol,marks:new Array(L.n*L.n).fill(0),hint:new Array(L.n*L.n).fill(false),
+     hearts:CONFIG.HEARTS,undo:[],done:false,elapsed:0};
+  Store.set('current',level);
+  try{window.history.replaceState(null,'','?level='+level);}catch(e){}
+  $('#lvlNum').textContent=level;$('#lvlSize').textContent=L.n+'×'+L.n;
+  board.classList.remove('won');
+  buildBoard();renderHearts();startTimer();Ads.gameplayStart();
+}
+
+function buildBoard(){
+  const n=S.n;board.innerHTML='';
+  board.style.gridTemplateColumns=`repeat(${n},1fr)`;board.style.gridTemplateRows=`repeat(${n},1fr)`;
+  for(let r=0;r<n;r++)for(let c=0;c<n;c++){
+    const d=document.createElement('div'),g=S.reg[r][c];
+    d.className='cell';d.dataset.i=r*n+c;
+    d.style.background=CONFIG.REGION_COLORS[g%CONFIG.REGION_COLORS.length];
+    const sh=['inset 0 0 0 .5px rgba(36,49,44,.18)'];
+    if(r>0&&S.reg[r-1][c]!==g) sh.push('inset 0 2px 0 0 #24312c');
+    if(r<n-1&&S.reg[r+1][c]!==g) sh.push('inset 0 -2px 0 0 #24312c');
+    if(c>0&&S.reg[r][c-1]!==g) sh.push('inset 2px 0 0 0 #24312c');
+    if(c<n-1&&S.reg[r][c+1]!==g) sh.push('inset -2px 0 0 0 #24312c');
+    d.style.boxShadow=sh.join(',');
+    board.appendChild(d);
+  }
+  layout();
+}
+function layout(){
+  if(!S) return;
+  const w=Math.min(window.innerWidth-24,560);
+  const h=window.innerHeight-250;
+  const size=Math.floor(Math.max(240,Math.min(w,h))/S.n)*S.n;
+  board.style.width=board.style.height=size+'px';
+  board.style.setProperty('--cell',size/S.n+'px');
+}
+window.addEventListener('resize',layout);
+
+function renderCell(i,pop){
+  const el=board.children[i],m=S.marks[i];
+  el.innerHTML=m===2?FLOWER:m===1?'<span class="x">✕</span>':'';
+  el.classList.toggle('hinted',m===2&&S.hint[i]);
+  if(pop){el.classList.remove('pop');void el.offsetWidth;el.classList.add('pop');}
+}
+function renderAll(){for(let i=0;i<S.marks.length;i++)renderCell(i);}
+function renderHearts(){
+  let h='';for(let i=0;i<CONFIG.HEARTS;i++)h+=`<span class="${i<S.hearts?'':'empty'}">❤️</span>`;
+  $('#hearts').innerHTML=h;
+}
+function pushUndo(){S.undo.push(S.marks.slice());if(S.undo.length>200)S.undo.shift();}
+
+function tapCell(i){
+  if(!S||S.done) return;
+  const m=S.marks[i];
+  if(m===2) return;                       // correct flowers are locked
+  if(m===0){pushUndo();S.marks[i]=1;renderCell(i);Sound.tap();return;}
+  tryPlace(i,false);
+}
+function markX(i){if(S.marks[i]===0){S.marks[i]=1;renderCell(i);}}
+
+function tryPlace(i,isHint){
+  const n=S.n,r=Math.floor(i/n),c=i%n;
+  if(S.sol[r]===c){
+    if(!isHint) pushUndo();
+    S.marks[i]=2;if(isHint)S.hint[i]=true;
+    renderCell(i,true);Sound.place();vibrate(15);
+    if(settings.autoX) autoX(r,c);
+    if(S.marks.filter(v=>v===2).length===n) win();
+  }else{
+    S.hearts--;S.marks[i]=1;renderCell(i);renderHearts();
+    const el=board.children[i];el.classList.remove('bad');void el.offsetWidth;el.classList.add('bad');
+    board.classList.remove('shake');void board.offsetWidth;board.classList.add('shake');
+    Sound.wrong();vibrate([40,40,40]);
+    if(S.hearts<=0) fail();
+  }
+}
+function autoX(r,c){
+  const n=S.n,g=S.reg[r][c];
+  for(let rr=0;rr<n;rr++)for(let cc=0;cc<n;cc++){
+    if(rr===r||cc===c||S.reg[rr][cc]===g||(Math.abs(rr-r)<=1&&Math.abs(cc-c)<=1)) markX(rr*n+cc);
+  }
+}
+
+/* drag to mark many ✕ */
+let drag=null;
+const cellAt=(x,y)=>{const el=document.elementFromPoint(x,y);const c=el&&el.closest&&el.closest('.cell');return c&&board.contains(c)?+c.dataset.i:-1;};
+board.addEventListener('pointerdown',e=>{
+  if(!S||S.done) return;
+  const i=cellAt(e.clientX,e.clientY);if(i<0) return;
+  drag={start:i,moved:false,seen:new Set([i])};
+  try{board.setPointerCapture(e.pointerId);}catch(_){}
+});
+board.addEventListener('pointermove',e=>{
+  if(!drag) return;
+  const i=cellAt(e.clientX,e.clientY);if(i<0||drag.seen.has(i)) return;
+  if(!drag.moved){drag.moved=true;pushUndo();markX(drag.start);}
+  drag.seen.add(i);markX(i);
+});
+board.addEventListener('pointerup',()=>{if(!drag) return;if(!drag.moved) tapCell(drag.start);drag=null;});
+board.addEventListener('pointercancel',()=>drag=null);
+
+/* timer */
+function startTimer(){
+  clearInterval(timerId);$('#timer').textContent=fmt(S.elapsed);
+  timerId=setInterval(()=>{if(S&&!S.done&&!document.hidden){S.elapsed++;$('#timer').textContent=fmt(S.elapsed);}},1000);
+}
+
+/* win / fail */
+function win(){
+  S.done=true;clearInterval(timerId);Ads.gameplayStop();
+  board.classList.add('won');Sound.win();petals();
+  Store.set('unlocked',Math.max(Store.get('unlocked',1),S.level+1));
+  Store.set('solved',Store.get('solved',0)+1);
+  const best=Store.get('best',{});if(!best[S.level]||S.elapsed<best[S.level]){best[S.level]=S.elapsed;Store.set('best',best);}
+  $('#winText').textContent=`Level ${S.level} solved in ${fmt(S.elapsed)}`;
+  setTimeout(()=>$('#winModal').classList.remove('hidden'),900);
+}
+function fail(){S.done=true;clearInterval(timerId);Ads.gameplayStop();setTimeout(()=>$('#failModal').classList.remove('hidden'),500);}
+function petals(){
+  for(let k=0;k<26;k++){
+    const p=document.createElement('div');p.className='petal';p.textContent=['🌸','🌼','🌺','✿'][k%4];
+    p.style.left=Math.random()*100+'vw';p.style.animationDuration=1.6+Math.random()*1.6+'s';p.style.animationDelay=Math.random()*.5+'s';
+    document.body.appendChild(p);setTimeout(()=>p.remove(),4000);
+  }
+}
+function closeModals(){document.querySelectorAll('.modal').forEach(m=>m.classList.add('hidden'));}
+
+/* share */
+async function share(){
+  if(!S) return;
+  const url=location.origin+location.pathname+'?level='+S.level;
+  const text=`I'm stuck on Level ${S.level} of Bloom Grid 🌸 Bet you can't solve it!`;
+  try{
+    if(navigator.share){await navigator.share({title:'Bloom Grid',text,url});return;}
+    await navigator.clipboard.writeText(text+' '+url);toast('Link copied!');
+  }catch(e){if(e&&e.name!=='AbortError')toast(url);}
+}
+
+/* buttons */
+$('#undoBtn').onclick=()=>{
+  if(!S||S.done||!S.undo.length) return;
+  S.marks=S.undo.pop();
+  S.hint.forEach((h,i)=>{if(h)S.marks[i]=2;});
+  renderAll();Sound.tap();
+};
+$('#hintBtn').onclick=()=>{
+  if(!S||S.done) return;
+  Ads.rewarded('hint',()=>{
+    const rows=[...Array(S.n).keys()].filter(r=>S.marks[r*S.n+S.sol[r]]!==2);
+    if(!rows.length) return;
+    const r=rows[Math.floor(Math.random()*rows.length)];
+    tryPlace(r*S.n+S.sol[r],true);
+  });
+};
+$('#shareBtn').onclick=share;
+$('#winShareBtn').onclick=share;
+$('#nextBtn').onclick=()=>{
+  const next=S.level+1,solved=Store.get('solved',0);
+  closeModals();
+  if(S.level>=CONFIG.INTERSTITIAL_FROM_LEVEL&&solved%CONFIG.INTERSTITIAL_EVERY===0) Ads.interstitial('next-level',()=>startLevel(next));
+  else startLevel(next);
+};
+$('#reviveBtn').onclick=()=>Ads.rewarded('revive',()=>{
+  S.hearts=1;S.done=false;renderHearts();closeModals();startTimer();Ads.gameplayStart();
+});
+$('#retryBtn').onclick=()=>startLevel(S.level);
+$('#homeBtn').onclick=showHome;
+$('#playBtn').onclick=()=>startLevel(Store.get('current',1));
+$('#levelsBtn').onclick=()=>{
+  const un=Store.get('unlocked',1),cur=Store.get('current',1),max=Math.max(30,un+4);let h='';
+  for(let l=1;l<=max;l++){const cls=l===cur?'cur':l<un?'done':'';h+=`<button class="${cls}" ${l>un?'disabled':''} data-l="${l}">${l>un?'🔒':l}</button>`;}
+  $('#levelGrid').innerHTML=h;$('#levelsModal').classList.remove('hidden');
+};
+$('#levelGrid').onclick=e=>{const b=e.target.closest('button');if(b&&!b.disabled)startLevel(+b.dataset.l);};
+$('#closeLevels').onclick=closeModals;
+function paintToggles(){
+  $('#soundBtn').textContent=settings.sound?'🔊 Sound on':'🔈 Sound off';
+  $('#autoBtn').textContent=settings.autoX?'✕ Auto-mark on':'✕ Auto-mark off';
+}
+$('#soundBtn').onclick=()=>{settings.sound=!settings.sound;Store.set('settings',settings);paintToggles();};
+$('#autoBtn').onclick=()=>{settings.autoX=!settings.autoX;Store.set('settings',settings);paintToggles();};
+
+function showHome(){
+  if(S&&!S.done){Ads.gameplayStop();}
+  closeModals();
+  $('#playBtn').textContent='Play · Level '+Store.get('current',1);
+  paintToggles();$('#home').classList.remove('hidden');
+}
+
+/* boot */
+(async function(){
+  await Ads.init();
+  const q=new URLSearchParams(location.search).get('level');
+  if(q&&+q>0) startLevel(+q);   // shared/video links open straight into the level
+  else showHome();
+})();
+</script>
+</body>
+</html>
